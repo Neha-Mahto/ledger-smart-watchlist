@@ -1,118 +1,141 @@
-# Ledger — Smart Market Watchlist & Delta Digest
+# Ledger — A Smart Market Watchlist
 
-> **Product Thesis**: A watchlist's job is to protect the user's attention, not just display data. Most of the value is in deciding what is worth noticing, not in rendering raw numbers.
+**One-liner:** Ledger protects your attention by surfacing only the market moves that truly matter, not just a stream of raw prices.
 
-Ledger is a high-density, modern financial terminal web application designed to eliminate market noise. Instead of forcing users to scan dozens of flickering price rows, Ledger's **Delta Engine** statistically isolates meaningful market anomalies (volatility-relative price moves, volume surges, range breaks, custom price alerts, and feed staleness) and synthesizes them into an actionable **"Since You Last Checked"** digest and correlated sector stories.
+![Ledger dashboard](<img width="1532" height="735" alt="Screenshot 2026-09-07 090027" src="https://github.com/user-attachments/assets/fc42939b-70a9-486e-bd89-22857ab86fbb" />
+)
 
----
+## The Problem / Why This Exists
 
-## 🏆 Presentation Pitch (For Hackathon Judges)
+Typical watchlists are rows of live prices that leave users to manually decide what is worth noticing. The UI constantly flickers, and most price changes are noise. Ledger flips this paradigm: it protects the investor's attention by automatically highlighting meaningful market events and summarizing them in a "Since You Last Checked" digest.
 
-> *"Most financial watchlists bombard traders with dozens of flickering numbers, forcing them to scan for signal amidst overwhelming noise. Ledger flips this paradigm: it is an attention-protecting market watchlist powered by a statistical delta engine. By scoring market events relative to a symbol's own historical realized volatility and volume averages, Ledger aggregates anomalies into a ranked 'Since You Last Checked' digest and correlated sector stories. Backed by a Node.js + Express + Prisma SQLite engine and Socket.IO real-time push, Ledger protects investor attention by surfacing only what genuinely demands notice."*
+## What Counts as a "Meaningful Change"
 
----
+The core differentiator is the **Delta Engine** (see `server/src/engine/deltaEngine.ts`). It evaluates each tick against a symbol-specific 30-period rolling window and generates anomaly signals:
 
-## ⚡ Tech Stack
+| Signal | How It's Detected | Scoring (≈ points) |
+|---|---|---|
+| Volatility-Relative Price Move | `\|return\| / rollingStdDev ≥ 1.5×` | up to 30 |
+| Volume Spike | `currentVolume / avgVolume ≥ 1.8×` | up to 25 |
+| 24h Range Break | Price crosses the previous day's high/low with ≥ 1% move | 20 |
+| User-Defined Price Alert | Explicit alert set by the user (always fires) | 35 |
+| Feed Staleness | No tick for > 10s (or `isStale` flag) | 20 |
 
-- **Frontend**: React + TypeScript + Vite, Tailwind CSS (Custom Dark Obsidian Ledger Design Tokens with Glassmorphism), Lucide React, Framer Motion, Recharts (Sparklines & Intraday charts), `cmdk` Command Palette (`⌘K` / `Ctrl+K`).
-- **Backend**: Node.js + Express + TypeScript, Socket.IO for real-time WebSocket tick fan-out.
-- **Persistence**: SQLite via Prisma ORM (`prisma/schema.prisma`). Upgrade path to PostgreSQL is a single connection string change in Prisma.
-- **Testing**: Vitest unit test suite covering 100% of Delta Engine statistical rules.
-- **Infrastructure**: Multi-stage `Dockerfile` and `docker-compose.yml` for local one-command startup.
+When two or more signals fire for a symbol, the engine adds a composition bonus (×1.25) and caps the total at 100. The resulting `attentionScore` drives the ranking in the digest and drives sector-story detection (`detectSectorStories`).
 
----
+## How State Persists Across Sessions / Devices
 
-## 📊 Delta & Attention Engine (Core IP)
+- **Identity & Auth** – JWT-based authentication (`server/src/index.ts`).
+- **Persistence Layer** – SQLite managed through Prisma (`server/prisma/schema.prisma`). Watchlists, price alerts, and the `LastSeenSnapshot` (used for the unread digest) are stored here.
+- **Cross-Device Consistency** – Because the snapshot lives on the server, any device that authenticates with the same token sees the same unread count and digest, eliminating reliance on browser storage.
 
-Traditional watchlists rely on naive fixed percentage thresholds (e.g. "flag if change > 2%"). A 2% move in a penny stock is noise, whereas a 2% move in a mega-cap stock is historic. Ledger's **Delta Engine** evaluates ticks against symbol-specific 30-period rolling windows:
+## Handling Stale / Conflicting Data
 
-1. **Volatility-Relative Price Move ($Z_{vol}$)**:
-   Calculates realized volatility $\sigma = \sqrt{\frac{1}{N-1}\sum (r_i - \bar{r})^2}$. Measures price moves in terms of standard deviation Z-scores:
-   $$Z_{vol} = \frac{|r_{current}|}{\sigma_{realized}}$$
-2. **Volume Surge Ratio ($R_{vol}$)**:
-   Measures volume against trailing 30-period Simple Moving Average:
-   $$R_{vol} = \frac{V_{current}}{\text{SMA}_{30}(V)}$$
-3. **24h Range Break**:
-   Triggers when current tick breaches previous day high or low.
-4. **User Price Alerts**:
-   Direct price threshold triggers that always fire regardless of statistical distributions.
-5. **Feed Staleness Detection**:
-   Explicitly detects feed timeouts (>10s) and surfaces starvation as a signal rather than silently displaying stale numbers as live.
-6. **Combined 0–100 Attention Score**:
-   Multi-signal composition weighting that ranks multi-anomalous events higher than isolated single signals.
+The market simulator flags a tick as stale when:
 
----
+```ts
+const isStaleFeed = Boolean(tick.isStale) || staleAgeSec > 10;
+```
 
-## 📱 Features
+Stale ticks generate an explicit `STALENESS` signal (score 20) and are shown in the UI with a visible "STALE (Ns)" badge. This makes data quality transparent rather than silently displaying outdated prices.
 
-### Tier 1 — MVP Core
-- **Token Identity & Watchlist CRUD**: JWT auth identity with server-persisted watchlists in SQLite.
-- **Real-Time Price & Sparklines**: Tabular ledger alignment, day high/low progress bars, and Recharts mini sparklines.
-- **"Since You Last Checked" Digest**: Ranked summary of market anomalies computed against a server-side `LastSeenSnapshot`.
-- **Feed Starvation Demo**: Simulated feed starvation timer on `ONGC` to demonstrate live staleness detection.
+## Tech Stack
 
-### Tier 2 — High-Impact Additions
-- **Real-time Push (Socket.IO)**: Low-latency WebSocket push for price ticks and attention scores.
-- **Correlated Sector Stories**: Detects sector-wide co-movements (e.g., *"IT sector: TCS, INFY, WIPRO all up +2.1% on volume"*) and groups N rows into 1 story card.
-- **Market Pulse Panel**: Compares user watchlist average performance against a synthetic benchmark index (Nifty 50).
-- **Explainable Confidence in UI**: Detail inspector displays exact z-scores, volume surge ratios, and historical event timelines.
-- **Command Palette (`⌘K` / `Ctrl+K`)**: Power-user overlay for search, jumping to detail views, and adding symbols.
+| Layer | Technology | Notes |
+|---|---|---|
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS (custom ledger palette), Recharts, Lucide-React, Framer-Motion, cmdk command palette | Light-blue / emerald theme, responsive UI |
+| Backend | Node 20, Express, TypeScript, Socket.IO, Prisma (SQLite) | Real-time push, delta engine, JWT auth |
+| Testing | Vitest (unit tests for Delta Engine) | 100% coverage of statistical rules |
+| Containerisation | Docker (multi-stage Dockerfile), docker-compose.yml | One-command local environment |
+| CI / Lint | ESLint, Prettier (via Vite) | Consistent code style |
 
----
+## Project Structure
 
-## 🚀 Running Locally
+```
+ledger-smart-watchlist/
+├─ .gitignore
+├─ Dockerfile                     # Multi-stage build for server + client
+├─ docker-compose.yml             # Spins up both services
+├─ README.md
+├─ client/                        # Front-end SPA
+│  ├─ dist/                       # Production build artifacts
+│  ├─ src/
+│  │  ├─ App.tsx                  # Main layout, navigation tabs
+│  │  ├─ components/              # Header, LandingPage, PriceAlertsManager, etc.
+│  │  ├─ services/                # API helpers (fetch symbols, alerts)
+│  │  ├─ utils/                   # rankSymbolSearch utility mirroring server ranking
+│  │  └─ types.ts                 # Shared TypeScript types
+│  ├─ index.html
+│  ├─ package.json
+│  ├─ tailwind.config.js          # Custom "ledger" color palette
+│  └─ vite.config.ts
+└─ server/                        # Back-end API & engine
+   ├─ prisma/
+   │  ├─ dev.db                   # SQLite file (generated)
+   │  └─ schema.prisma
+   ├─ src/
+   │  ├─ engine/
+   │  │  ├─ deltaEngine.ts        # Core attention-scoring logic
+   │  │  ├─ marketSimulator.ts    # Simulated tick feed (includes staleness)
+   │  │  ├─ symbolUniverse.ts     # ~180 static NSE symbols
+   │  │  └─ types.ts              # Shared interfaces
+   │  ├─ index.ts                 # Express server, routes, Socket.IO
+   │  └─ db/
+   │     └─ seed.ts               # Seed script for demo data
+   ├─ package.json
+   └─ tsconfig.json
+```
 
-### Option 1: Docker Compose (One Command)
+
+## Running It Locally
+
+### Option 1 – Docker (single command)
+
 ```bash
 docker-compose up --build
 ```
-Open [http://localhost:4000](http://localhost:4000) in your browser.
 
-### Option 2: Local Node.js Development
-1. **Server Setup**:
-   ```bash
-   cd server
-   npm install
-   npx prisma db push
-   npm run db:seed
-   npm run test      # Run Vitest unit tests
-   npm run dev       # Starts Express + Socket.IO server on port 4000
-   ```
-2. **Client Setup**:
-   ```bash
-   cd client
-   npm install
-   npm run dev       # Starts Vite dev server on http://localhost:3000
-   ```
+- The API listens on `http://localhost:4000` (Socket.IO push).
+- The frontend is served on `http://localhost:3000`.
 
----
+### Option 2 – Manual Node.js Development
 
-## 🧪 Running Unit Tests
-
-To run the Vitest test suite for the Delta Engine:
 ```bash
+# ── Backend ─────────────────────────────────────
 cd server
-npm run test
+npm install
+npx prisma db push          # Create SQLite schema
+npm run db:seed             # (optional) seed demo data
+npm run test                # Run Vitest unit tests
+npm run dev                 # Starts Express + Socket.IO on port 4000
+
+# ── Frontend ─────────────────────────────────────
+cd ../client
+npm install
+npm run dev                 # Starts Vite dev server at http://localhost:3000
 ```
 
-Expected output:
-```
- ✓ src/engine/__tests__/deltaEngine.test.ts (6 tests)
- Test Files  1 passed (1)
-      Tests  6 passed (6)
-```
+All commands are taken directly from the existing `package.json` scripts.
 
----
+## Where Complexity Was Kept Simple (and the Upgrade Path)
 
-## 🔍 Engineering & Architecture Q&A
+| Simplified Aspect | Reason for Simplicity | Production-grade Upgrade |
+|---|---|---|
+| Data Source | In-memory static `symbolUniverse.ts` and a deterministic `marketSimulator.ts` make the demo self-contained. | Connect to a real market feed (e.g., WebSocket from a data vendor) and replace the simulator with a streaming ingest service. |
+| Persistence | SQLite via Prisma is lightweight and requires no external DB server. | Switch the Prisma datasource to PostgreSQL/MySQL by changing the connection URL in `schema.prisma`. |
+| Authentication | JWT tokens for the demo. | Integrate a full OAuth2 provider (Google, Auth0) and refresh-token handling. |
+| Scaling of Real-time Push | Single Socket.IO server broadcasts to all clients. | Partition Socket.IO rooms per symbol, shard across multiple Node instances behind a Redis adapter. |
+| Sector-Story Detection | Simple in-process aggregation of attention scores. | Run a background worker (e.g., BullMQ) to pre-compute sector stories and cache them in Redis. |
 
-### How state persists across devices?
-User identity is token-authenticated server-side. Watchlists, price alerts, and `LastSeenSnapshot` records are stored in SQLite via Prisma. When a user logs in from a second device or incognito window, the backend computes unread digests relative to the server-side snapshot rather than browser `localStorage`.
+## How This Scales
 
-### How stale/conflicting data is handled?
-Rather than silently showing stale prices as live, the `MarketSimulator` and `DeltaEngine` measure tick elapsed time. Feeds exceeding 10s without ticks are flagged `isStale: true` with a visible age counter (`STALE (14s)`), and the staleness itself is passed to the attention engine as an anomaly signal.
+- **Decoupled Ingestion** – Market data ingestion can be off-loaded to separate workers that publish ticks to a Redis Pub/Sub channel; the API server only consumes the stream.
+- **Sharded WebSocket Fan-out** – Socket.IO can use the Redis adapter to broadcast only relevant symbol rooms, reducing bandwidth per client.
+- **Digest Pre-computation** – Attention scores are calculated on each tick and stored in a fast cache (Redis); UI requests fetch the pre-computed digest rather than recomputing on the fly.
+- **Horizontal Backend Scaling** – The stateless Express server can be replicated behind a load balancer; all instances share the same database and Redis cache.
 
-### How this scales to millions of users & symbols?
-1. **Ingestion Decoupling**: Separate market feed ingestion workers from client Express API servers using Redis Pub/Sub channels.
-2. **Symbol-Keyed Socket Fan-Out**: Shard WebSocket servers by symbol rooms so clients only receive push updates for symbols present on their active watchlist.
-3. **Digest Pre-Computation**: Pre-compute attention scores asynchronously on incoming tick events and store in a distributed Redis cache, avoiding on-the-fly computation during user HTTP requests.
+## License & Credits
+
+- **License:** MIT (see `LICENSE` file).
+- **Core contributors:** Neha Mahto (project lead).
+- **Thanks:** Vite, Tailwind CSS, Prisma, Socket.IO, Vitest, and the open-source community for the libraries that make this possible.
