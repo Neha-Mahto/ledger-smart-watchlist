@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  ledger-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - JWT_SECRET=ledger-secret-key-production
+    volumes:
+      - ledger-data:/app/server/prisma
+    restart: unless-stopped
+
+volumes:
+  ledger-data:

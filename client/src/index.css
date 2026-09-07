@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #F8FAFC;
+    color: #0F172A;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  .dark body {
+    background-color: #080C14;
+    color: #F8FAFC;
+  }
+}
+
+/* Tabular numbers for monospace columns */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Ledger Blue & Green Card Utilities */
+.ledger-card-style {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  border-radius: 1rem;
+}
+
+.dark .ledger-card-style {
+  background: #0F172A;
+  border: 1px solid #1E293B;
+  box-shadow: none;
+}
+
+.ledger-card-style:hover {
+  border-color: #2962FF;
+  box-shadow: 0 4px 14px rgba(41, 98, 255, 0.1);
+}
+
+.btn-primary-blue {
+  background-color: #2962FF;
+  color: #FFFFFF;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.btn-primary-blue:hover {
+  background-color: #1E53E5;
+  box-shadow: 0 4px 12px rgba(41, 98, 255, 0.3);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #1E293B;
+}

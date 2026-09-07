@@ -1,0 +1,15 @@
+{
+  "name": "ledger-smart-watchlist",
+  "version": "1.0.0",
+  "description": "Ledger — Smart Market Watchlist & Delta Change Digest",
+  "scripts": {
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "build": "npm run build --prefix server && npm run build --prefix client",
+    "test": "npm run test --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
