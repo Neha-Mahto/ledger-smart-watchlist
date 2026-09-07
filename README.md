@@ -2,7 +2,7 @@
 
 **One-liner:** Ledger protects your attention by surfacing only the market moves that truly matter, not just a stream of raw prices.
 
-![Ledger dashboard](<img width="1532" height="735" alt="Screenshot 2026-09-07 090027" src="https://github.com/user-attachments/assets/fc42939b-70a9-486e-bd89-22857ab86fbb" />
+![Ledger dashboard](Screenshot.png
 )
 
 ## The Problem / Why This Exists
